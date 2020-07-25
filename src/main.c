@@ -1,17 +1,19 @@
 #define WIN32_LEAN_AND_MEAN
 
-// #include <windows.h>
-#include "main.h"
+// project headers
+#include "../headers/main.h"
+#include "../headers/setupGL.h"
+#include "../headers/fullscreen.h"
+
+// windows and opengl headers
 #include <gl/GL.h>
 #include <gl/GLU.h>
 #include <stdio.h>
+#include <windowsx.h>
 
-/* workaround for boolean type in C */
-typedef enum
-{
-    false,
-    true
-} bool;
+/* GLOBAL Variables */
+HDC g_HDC;
+BOOL fullscreen = FALSE;
 
 /* Function for setting up the pixel format for device context */
 void SetupPixelFormat(HDC hDC)
@@ -60,6 +62,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     /*  Device Context*/
     static HDC hDC;
 
+    /* width and height for window resize */
+    int width, height;
+
     char string[] = "HELLO WORLD!";
     /*  Switch message, condition that is met will execute*/
     switch (message)
@@ -69,12 +74,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         /* Get the device context */
         hDC = GetDC(hwnd);
+        /* Assign local device context to global variable */
+        g_HDC = hDC;
         /* Set Pixel Format for the device context */
         SetupPixelFormat(hDC);
         /* Create OpenGl Context */
         hRC = wglCreateContext(hDC);
         /* Set current rendering context */
         wglMakeCurrent(hDC, hRC);
+        return 0;
         break;
     }
     /* Window is being destroyed */
@@ -86,6 +94,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         wglDeleteContext(hRC);
         /* Message code after application quits */
         PostQuitMessage(0);
+        return 0;
         break;
     }
     /*  Window is closing*/
@@ -96,15 +105,32 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         return 0;
         break;
     }
+    case WM_SIZE:
+    {
+        /* Retrieve width and height */
+        height = GET_X_LPARAM(lParam);
+        width = GET_Y_LPARAM(lParam);
+
+        /* Don't want a divide by 0 */
+        if (height == 0)
+        {
+            height = -1;
+        }
+
+        resizeViewPort(width, height);
+
+        return 0;
+        break;
+    }
     /*  Window needs update*/
     case WM_PAINT:
     {
-        hDC = BeginPaint(hwnd, &paintStruct);
-        /*  Set text color to blue*/
-        SetTextColor(hDC, 0x00FF0000);
-        /* Display Text in middle of the window */
-        TextOut(hDC, 150, 150, string, sizeof(string) - 1);
-        EndPaint(hwnd, &paintStruct);
+        // hDC = BeginPaint(hwnd, &paintStruct);
+        // /*  Set text color to blue*/
+        // SetTextColor(hDC, 0x00FF0000);
+        // /* Display Text in middle of the window */
+        // TextOut(hDC, 150, 150, string, sizeof(string) - 1);
+        // EndPaint(hwnd, &paintStruct);
         return 0;
         break;
     }
@@ -139,13 +165,21 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, LPSTR lpCmdLin
     HWND hwnd;              // window handle
     DWORD dwExStyle;        // window extended style
     DWORD dwStyle;          // window style
+    HMONITOR hmonitor;      // handle to a monitor
     RECT windowRect;        // window rectangle
     MSG msg;                // message
-    bool done;              // flag saying when app is complete
+    BOOL done;              // flag saying when app is complete
 
-    int width = 800;
-    int height = 600;
+    int width = 960;
+    int height = 540;
+    int attributes[] = {0, 0};
+    POINT ptZero = {0, 0};
     int bits = 32;
+
+    GetDisplayAttributesFromPoint(&attributes, &ptZero);
+
+    width = attributes[0];
+    height = attributes[1];
 
     windowRect.left = (long)0;
     windowRect.right = (long)width;
@@ -162,26 +196,44 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, LPSTR lpCmdLin
         return 0;
     }
 
+    if (fullscreen)
+    {
+        /* Set Proper Display Settings for fullscreen */
+        if (!SetDisplaySettings(width, height, bits))
+        {
+            fullscreen = FALSE;
+        }
+    }
+
+    /* Check if fullscreen is still on */
+    AdjustDisplay(&windowRect, dwExStyle, dwStyle, fullscreen);
+
+    /* Adjust Window rect according to draw style */
+    AdjustWindowRectEx(&windowRect, dwStyle, FALSE, dwExStyle);
+
     /* Creates the Window Handle */
-    hwnd = CreateWindowEx(NULL,                                          // draw extended style for the window
-                          "ChessOnline",                                 // Class Name for window class
-                          "Chess Online",                                // Window Title
-                          WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_SYSMENU, // draw style for the window
-                          0,                                             // x
-                          0,                                             // y
-                          windowRect.right - windowRect.left,            // width
-                          windowRect.bottom - windowRect.top,            // height
-                          NULL,                                          // Parent Handle
-                          NULL,                                          // Menu Handle
-                          hInstance,                                     // Application Handle
-                          NULL);                                         // Params
+    hwnd = CreateWindowEx(NULL,                                        // draw extended style for the window
+                          "ChessOnline",                               // Class Name for window class
+                          "Chess Online",                              // Window Title
+                          dwStyle | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, // draw style for the window
+                          0,                                           // x
+                          0,                                           // y
+                          windowRect.right - windowRect.left,          // width
+                          windowRect.bottom - windowRect.top,          // height
+                          NULL,                                        // Parent Handle
+                          NULL,                                        // Menu Handle
+                          hInstance,                                   // Application Handle
+                          NULL);                                       // Params
     if (!hwnd)
     {
         printf("Error:%d\n", GetLastError());
         return 0;
     }
 
-    done = false;
+    ShowWindow(hwnd, SW_SHOW);
+    UpdateWindow(hwnd);
+
+    done = FALSE;
 
     while (!done)
     {
@@ -189,7 +241,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, LPSTR lpCmdLin
         PeekMessage(&msg, NULL, NULL, NULL, PM_REMOVE);
         if (msg.message == WM_QUIT)
         {
-            done = true;
+            done = TRUE;
         }
         else
         {
@@ -198,6 +250,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, LPSTR lpCmdLin
             /* Dispatches those Messages for PeekMessage */
             DispatchMessage(&msg);
         }
+    }
+
+    if (fullscreen)
+    {
+        ChangeDisplaySettings(NULL, 0);
+        ShowCursor(TRUE);
     }
 
     return msg.wParam;

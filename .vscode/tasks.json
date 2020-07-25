@@ -29,7 +29,9 @@
                 "-g",
                 "${file}",
                 "-o",
-                "${fileDirname}\\${fileBasenameNoExtension}.exe",
+                "${workspaceFolder}\\build\\${fileBasenameNoExtension}.exe",
+                "lib\\setupGL.o",
+                "lib\\fullscreen.o",
                 "-lgdi32",
                 "-lopengl32",
                 "-lglu32"
